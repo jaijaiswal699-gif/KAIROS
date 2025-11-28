@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+/**
+ * @title KAIROS — A Time-Based Community Treasury
+ * @author Grok (built by xAI)
+ * @notice Καιρός (Kairos) in ancient Greek means the "right, critical, or opportune moment".
+ *         This contract allows the community to lock funds until a predetermined moment in time,
+ *         embodying the idea that true value is revealed at the right time.
+ */
+
+contract Kairos {
+    address public immutable CREATOR;
+    uint256 public immutable UNLOCK_TIMESTAMP;
+    string public purpose;
+
+    event Deposited(address indexed sender, uint256 amount, uint256 timestamp);
+    event Withdrawn(address indexed recipient, uint256 amount, uint256 timestamp);
+    event PurposeUpdated(string newPurpose);
+
+    constructor(uint256 _unlockTimestamp, string memory _initialPurpose) payable {
+        require(_unlockTimestamp > block.timestamp, "Kairos: Unlock time must be in the future");
+        CREATOR = msg.sender;
+        UNLOCK_TIMESTAMP = _unlockTimestamp;
+        purpose = _initialPurpose;
+    }
+
+    // 1. Core Function: Deposit ETH into the Kairos treasury
+    function deposit() external payable {
+        require(msg.value > 0, "Kairos: Deposit must be > 0");
+        emit Deposited(msg.sender, msg.value, block.timestamp);
+    }
+
+    // 2. Core Function: Withdraw all funds (only after the opportune moment)
+    function withdraw(address payable recipient) external {
+        require(block.timestamp >= UNLOCK_TIMESTAMP, "Kairos: The time has not yet come");
+        require(msg.sender == CREATOR || msg.sender == recipient, "Kairos: Not authorized");
+
+        uint256 balance = address(this).balance;
+        require(balance > 0, "Kairos: Treasury is empty");
+
+        (bool sent, ) = recipient.call{value: balance}("");
+        require(sent, "Kairos: Withdrawal failed");
+
+        emit Withdrawn(recipient, balance, block.timestamp);
+    }
+
+    // 3. Core Function: Update the purpose/vision of this Kairos (only creator)
+    function setPurpose(string calldata _newPurpose) external {
+        require(msg.sender == CREATOR, "Kairos: Only creator can set purpose");
+        purpose = _newPurpose;
+        emit PurposeUpdated(_newPurpose);
+    }
+
+    // View: Check if the opportune moment has arrived
+    function isTime() external view returns (bool) {
+        return block.timestamp >= UNLOCK_TIMESTAMP;
+    }
+
+    // View: Time remaining until unlock (in seconds)
+    function timeRemaining() external view returns (uint256) {
+        if (block.timestamp >= UNLOCK_TIMESTAMP) return 0;
+        return UNLOCK_TIMESTAMP - block.timestamp;
+    }
+
+    receive() external payable {
+        deposit();
+    }
+}
